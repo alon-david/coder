@@ -13,8 +13,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/yamux"
+	"github.com/tabbed/pqtype"
 	"golang.org/x/xerrors"
+	"inet.af/netaddr"
 	"nhooyr.io/websocket"
+	"tailscale.com/tailcfg"
+	"tailscale.com/types/key"
 
 	"cdr.dev/slog"
 	"github.com/coder/coder/agent"
@@ -156,7 +160,18 @@ func (api *API) workspaceAgentMetadata(rw http.ResponseWriter, r *http.Request) 
 		})
 		return
 	}
+
+	ipp, ok := netaddr.FromStdIPNet(&workspaceAgent.Ipv6.IPNet)
+	if !ok {
+		httpapi.Write(rw, http.StatusInternalServerError, httpapi.Response{
+			Message: "Workspace agent has an invalid ipv6 address.",
+			Detail:  workspaceAgent.Ipv6.IPNet.String(),
+		})
+		return
+	}
+
 	httpapi.Write(rw, http.StatusOK, agent.Metadata{
+		Addresses:            []netaddr.IPPrefix{ipp},
 		OwnerEmail:           owner.Email,
 		OwnerUsername:        owner.Username,
 		EnvironmentVariables: apiAgent.EnvironmentVariables,
@@ -452,6 +467,183 @@ func (api *API) workspaceAgentPTY(rw http.ResponseWriter, r *http.Request) {
 	_, _ = io.Copy(ptNetConn, wsNetConn)
 }
 
+func (api *API) derpMap(rw http.ResponseWriter, r *http.Request) {
+	httpapi.Write(rw, http.StatusOK, tailcfg.DERPMap{
+		Regions: map[int]*tailcfg.DERPRegion{
+			9: {
+				RegionID:   9,
+				RegionCode: "dfw",
+				RegionName: "Dallas",
+				Avoid:      false,
+				Nodes: []*tailcfg.DERPNode{
+					{
+						Name:             "9a",
+						RegionID:         9,
+						HostName:         "derp9.tailscale.com",
+						CertName:         "",
+						IPv4:             "207.148.3.137",
+						IPv6:             "2001:19f0:6401:1d9c:5400:2ff:feef:bb82",
+						STUNPort:         0,
+						STUNOnly:         false,
+						DERPPort:         0,
+						InsecureForTests: false,
+						STUNTestIP:       "",
+					},
+					{
+						Name:             "9c",
+						RegionID:         9,
+						HostName:         "derp9c.tailscale.com",
+						CertName:         "",
+						IPv4:             "155.138.243.219",
+						IPv6:             "2001:19f0:6401:fe7:5400:3ff:fe8d:6d9c",
+						STUNPort:         0,
+						STUNOnly:         false,
+						DERPPort:         0,
+						InsecureForTests: false,
+						STUNTestIP:       "",
+					},
+					{
+						Name:             "9b",
+						RegionID:         9,
+						HostName:         "derp9b.tailscale.com",
+						CertName:         "",
+						IPv4:             "144.202.67.195",
+						IPv6:             "2001:19f0:6401:eb5:5400:3ff:fe8d:6d9b",
+						STUNPort:         0,
+						STUNOnly:         false,
+						DERPPort:         0,
+						InsecureForTests: false,
+						STUNTestIP:       "",
+					},
+				},
+			},
+		},
+		OmitDefaultRegions: true,
+	})
+}
+
+type WorkspaceKeysRequest struct {
+	Public key.NodePublic  `json:"public"`
+	Disco  key.DiscoPublic `json:"disco"`
+}
+
+func (api *API) postWorkspaceAgentKeys(rw http.ResponseWriter, r *http.Request) {
+	var (
+		ctx            = r.Context()
+		workspaceAgent = httpmw.WorkspaceAgent(r)
+		keys           WorkspaceKeysRequest
+	)
+	if !httpapi.Read(rw, r, &keys) {
+		return
+	}
+
+	err := api.Database.UpdateWorkspaceAgentKeysByID(ctx, database.UpdateWorkspaceAgentKeysByIDParams{
+		ID:                 workspaceAgent.ID,
+		WireguardPublicKey: keys.Public.String(),
+		DiscoPublicKey:     keys.Disco.String(),
+	})
+	if err != nil {
+		httpapi.Write(rw, http.StatusInternalServerError, httpapi.Response{
+			Message: "Internal error setting agent keys.",
+			Detail:  err.Error(),
+		})
+		return
+	}
+
+	rw.WriteHeader(http.StatusNoContent)
+}
+
+func (api *API) postWorkspaceAgentWireguardPeer(rw http.ResponseWriter, r *http.Request) {
+	var (
+		req            agent.WireguardPeerMessage
+		workspaceAgent = httpmw.WorkspaceAgentParam(r)
+	)
+	// if !api.Authorize(r, rbac.ActionUpdate, workspace) {
+	// 	httpapi.ResourceNotFound(rw)
+	// 	return
+	// }
+
+	if !httpapi.Read(rw, r, &req) {
+		return
+	}
+
+	if req.Recipient != workspaceAgent.ID {
+		httpapi.Write(rw, http.StatusBadRequest, httpapi.Response{
+			Message: "Invalid recipient.",
+		})
+		return
+	}
+
+	raw, err := req.MarshalText()
+	if err != nil {
+		httpapi.Write(rw, http.StatusInternalServerError, httpapi.Response{
+			Message: "Internal error marshaling wireguard peer message.",
+			Detail:  err.Error(),
+		})
+		return
+	}
+
+	err = api.Pubsub.Publish("wireguard_peers", raw)
+	if err != nil {
+		httpapi.Write(rw, http.StatusInternalServerError, httpapi.Response{
+			Message: "Internal error publishing wireguard peer message.",
+			Detail:  err.Error(),
+		})
+		return
+	}
+
+	rw.WriteHeader(http.StatusNoContent)
+}
+
+func (api *API) workspaceAgentWireguardListener(rw http.ResponseWriter, r *http.Request) {
+	api.websocketWaitMutex.Lock()
+	api.websocketWaitGroup.Add(1)
+	api.websocketWaitMutex.Unlock()
+	defer api.websocketWaitGroup.Done()
+
+	ctx := r.Context()
+	workspaceAgent := httpmw.WorkspaceAgent(r)
+
+	conn, err := websocket.Accept(rw, r, nil)
+	if err != nil {
+		httpapi.Write(rw, http.StatusBadRequest, httpapi.Response{
+			Message: "Failed to accept websocket.",
+			Detail:  err.Error(),
+		})
+		return
+	}
+	defer conn.Close(websocket.StatusNormalClosure, "")
+
+	agentIDBytes, _ := workspaceAgent.ID.MarshalText()
+	subCancel, err := api.Pubsub.Subscribe("wireguard_peers", func(ctx context.Context, message []byte) {
+		// Since we subscribe to all peer broadcasts, we do a light check to
+		// make sure we're the intended recipient without fully decoding the
+		// message.
+		hint, err := agent.WireguardPeerMessageRecipientHint(agentIDBytes, message)
+		if err != nil {
+			api.Logger.Error(ctx, "invalid wireguard peer message", slog.Error(err))
+			return
+		}
+
+		// We aren't the intended recipient.
+		if !hint {
+			return
+		}
+
+		_ = conn.Write(ctx, websocket.MessageBinary, message)
+	})
+	if err != nil {
+		api.Logger.Error(ctx, "pubsub listen", slog.Error(err))
+		return
+	}
+	defer subCancel()
+
+	// Wait for the connection to close or the client to send a message.
+	//noline:dogsled
+	_, _, _ = conn.Reader(ctx)
+	api.Logger.Info(ctx, "ws done!!!")
+}
+
 // dialWorkspaceAgent connects to a workspace agent by ID. Only rely on
 // r.Context() for cancellation if it's use is safe or r.Hijack() has
 // not been performed.
@@ -533,6 +725,19 @@ func convertApps(dbApps []database.WorkspaceApp) []codersdk.WorkspaceApp {
 	return apps
 }
 
+func inetToNetaddr(inet pqtype.Inet) netaddr.IPPrefix {
+	if !inet.Valid {
+		return netaddr.IPPrefixFrom(netaddr.IPv6Unspecified(), 128)
+	}
+
+	ipp, ok := netaddr.FromStdIPNet(&inet.IPNet)
+	if !ok {
+		return netaddr.IPPrefixFrom(netaddr.IPv6Unspecified(), 128)
+	}
+
+	return ipp
+}
+
 func convertWorkspaceAgent(dbAgent database.WorkspaceAgent, apps []codersdk.WorkspaceApp, agentUpdateFrequency time.Duration) (codersdk.WorkspaceAgent, error) {
 	var envs map[string]string
 	if dbAgent.EnvironmentVariables.Valid {
@@ -541,6 +746,7 @@ func convertWorkspaceAgent(dbAgent database.WorkspaceAgent, apps []codersdk.Work
 			return codersdk.WorkspaceAgent{}, xerrors.Errorf("unmarshal: %w", err)
 		}
 	}
+
 	workspaceAgent := codersdk.WorkspaceAgent{
 		ID:                   dbAgent.ID,
 		CreatedAt:            dbAgent.CreatedAt,
@@ -554,7 +760,18 @@ func convertWorkspaceAgent(dbAgent database.WorkspaceAgent, apps []codersdk.Work
 		EnvironmentVariables: envs,
 		Directory:            dbAgent.Directory,
 		Apps:                 apps,
+		IPv6:                 inetToNetaddr(dbAgent.Ipv6),
 	}
+
+	err := workspaceAgent.WireguardPublicKey.UnmarshalText([]byte(dbAgent.WireguardPublicKey))
+	if err != nil {
+		return codersdk.WorkspaceAgent{}, xerrors.Errorf("unmarshal wireguard public key %q: %w", dbAgent.WireguardPublicKey, err)
+	}
+	err = workspaceAgent.DiscoPublicKey.UnmarshalText([]byte(dbAgent.DiscoPublicKey))
+	if err != nil {
+		return codersdk.WorkspaceAgent{}, xerrors.Errorf("unmarshal disco public key %q: %w", dbAgent.DiscoPublicKey, err)
+	}
+
 	if dbAgent.FirstConnectedAt.Valid {
 		workspaceAgent.FirstConnectedAt = &dbAgent.FirstConnectedAt.Time
 	}

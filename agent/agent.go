@@ -27,6 +27,8 @@ import (
 	"go.uber.org/atomic"
 	gossh "golang.org/x/crypto/ssh"
 	"golang.org/x/xerrors"
+	"inet.af/netaddr"
+	"tailscale.com/types/key"
 
 	"cdr.dev/slog"
 	"github.com/coder/coder/agent/usershell"
@@ -43,12 +45,15 @@ const (
 )
 
 type Options struct {
+	PostPublicKeys         PostKeys
+	ListenWireguardPeers   ListenWireguardPeers
 	ReconnectingPTYTimeout time.Duration
 	EnvironmentVariables   map[string]string
 	Logger                 slog.Logger
 }
 
 type Metadata struct {
+	Addresses            []netaddr.IPPrefix
 	OwnerEmail           string            `json:"owner_email"`
 	OwnerUsername        string            `json:"owner_username"`
 	EnvironmentVariables map[string]string `json:"environment_variables"`
@@ -56,7 +61,14 @@ type Metadata struct {
 	Directory            string            `json:"directory"`
 }
 
+type PublicKeys struct {
+	Public key.NodePublic  `json:"public"`
+	Disco  key.DiscoPublic `json:"disco"`
+}
+
 type Dialer func(ctx context.Context, logger slog.Logger) (Metadata, *peerbroker.Listener, error)
+type PostKeys func(ctx context.Context, keys PublicKeys) error
+type ListenWireguardPeers func(ctx context.Context, logger slog.Logger) (<-chan *WireguardPeerMessage, func(), error)
 
 func New(dialer Dialer, options *Options) io.Closer {
 	if options == nil {
@@ -68,6 +80,8 @@ func New(dialer Dialer, options *Options) io.Closer {
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	server := &agent{
 		dialer:                 dialer,
+		postKeys:               options.PostPublicKeys,
+		listenWireguardPeers:   options.ListenWireguardPeers,
 		reconnectingPTYTimeout: options.ReconnectingPTYTimeout,
 		logger:                 options.Logger,
 		closeCancel:            cancelFunc,
@@ -79,8 +93,10 @@ func New(dialer Dialer, options *Options) io.Closer {
 }
 
 type agent struct {
-	dialer Dialer
-	logger slog.Logger
+	dialer               Dialer
+	postKeys             PostKeys
+	listenWireguardPeers ListenWireguardPeers
+	logger               slog.Logger
 
 	reconnectingPTYs       sync.Map
 	reconnectingPTYTimeout time.Duration
@@ -95,6 +111,8 @@ type agent struct {
 	metadata      atomic.Value
 	startupScript atomic.Bool
 	sshServer     *ssh.Server
+
+	wg *WireguardNetwork
 }
 
 func (a *agent) run(ctx context.Context) {
@@ -136,6 +154,11 @@ func (a *agent) run(ctx context.Context) {
 				a.logger.Warn(ctx, "agent script failed", slog.Error(err))
 			}
 		}()
+	}
+
+	err = a.startWireguard(ctx, metadata.Addresses)
+	if err != nil {
+		a.logger.Error(ctx, "start wireguard", slog.Error(err))
 	}
 
 	for {
@@ -223,6 +246,7 @@ func (a *agent) handlePeerConn(ctx context.Context, conn *peer.Conn) {
 }
 
 func (a *agent) init(ctx context.Context) {
+
 	// Clients' should ignore the host key when connecting.
 	// The agent needs to authenticate with coderd to SSH,
 	// so SSH authentication doesn't improve security.

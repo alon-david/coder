@@ -321,6 +321,14 @@ type AuditLog struct {
 	StatusCode     int32           `db:"status_code" json:"status_code"`
 }
 
+type CliWireguardPeer struct {
+	ID                 uuid.UUID      `db:"id" json:"id"`
+	Owner              uuid.UUID      `db:"owner" json:"owner"`
+	WireguardPublicKey sql.NullString `db:"wireguard_public_key" json:"wireguard_public_key"`
+	DiscoPublicKey     sql.NullString `db:"disco_public_key" json:"disco_public_key"`
+	Ipv6               pqtype.Inet    `db:"ipv6" json:"ipv6"`
+}
+
 type File struct {
 	Hash      string    `db:"hash" json:"hash"`
 	CreatedAt time.Time `db:"created_at" json:"created_at"`
@@ -494,6 +502,9 @@ type WorkspaceAgent struct {
 	InstanceMetadata     pqtype.NullRawMessage `db:"instance_metadata" json:"instance_metadata"`
 	ResourceMetadata     pqtype.NullRawMessage `db:"resource_metadata" json:"resource_metadata"`
 	Directory            string                `db:"directory" json:"directory"`
+	Ipv6                 pqtype.Inet           `db:"ipv6" json:"ipv6"`
+	WireguardPublicKey   string                `db:"wireguard_public_key" json:"wireguard_public_key"`
+	DiscoPublicKey       string                `db:"disco_public_key" json:"disco_public_key"`
 }
 
 type WorkspaceApp struct {

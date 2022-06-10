@@ -17,7 +17,7 @@ coderd/database/dump.sql: $(wildcard coderd/database/migrations/*.sql)
 	go run coderd/database/dump/main.go
 
 # Generates Go code for querying the database.
-coderd/database/querier.go: coderd/database/dump.sql $(wildcard coderd/database/queries/*.sql)
+coderd/database/querier.go: coderd/database/sqlc.yaml coderd/database/dump.sql $(wildcard coderd/database/queries/*.sql)
 	coderd/database/generate.sh
 
 dev:

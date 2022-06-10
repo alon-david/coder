@@ -252,6 +252,87 @@ func (c *Client) ListenWorkspaceAgent(ctx context.Context, logger slog.Logger) (
 	return agentMetadata, listener, json.NewDecoder(res.Body).Decode(&agentMetadata)
 }
 
+func (c *Client) PostWireguardPeer(ctx context.Context, peerMsg agent.WireguardPeerMessage) error {
+	res, err := c.Request(ctx, http.MethodPost, fmt.Sprintf("/api/v2/workspaceagents/%s/peer", peerMsg.Recipient), peerMsg)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusNoContent {
+		return readBodyAsError(res)
+	}
+
+	_, _ = io.Copy(io.Discard, res.Body)
+	return nil
+}
+
+func (c *Client) WireguardPeerListener(ctx context.Context, logger slog.Logger) (<-chan *agent.WireguardPeerMessage, func(), error) {
+	serverURL, err := c.URL.Parse("/api/v2/workspaceagents/me/wireguardlisten")
+	if err != nil {
+		return nil, nil, xerrors.Errorf("parse url: %w", err)
+	}
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		return nil, nil, xerrors.Errorf("create cookie jar: %w", err)
+	}
+	jar.SetCookies(serverURL, []*http.Cookie{{
+		Name:  httpmw.SessionTokenKey,
+		Value: c.SessionToken,
+	}})
+	httpClient := &http.Client{
+		Jar: jar,
+	}
+
+	fmt.Println("dialing", serverURL.String())
+	conn, res, err := websocket.Dial(ctx, serverURL.String(), &websocket.DialOptions{
+		HTTPClient: httpClient,
+		// Need to disable compression to avoid a data-race.
+		CompressionMode: websocket.CompressionDisabled,
+	})
+	if err != nil {
+		if res == nil {
+			return nil, nil, xerrors.Errorf("websocket dial: %w", err)
+		}
+		return nil, nil, readBodyAsError(res)
+	}
+
+	ch := make(chan *agent.WireguardPeerMessage, 1)
+	go func() {
+		defer conn.Close(websocket.StatusGoingAway, "")
+		defer close(ch)
+
+		for {
+			_, message, err := conn.Read(ctx)
+			if err != nil {
+				break
+			}
+
+			var msg agent.WireguardPeerMessage
+			err = msg.UnmarshalText(message)
+			if err != nil {
+				logger.Error(ctx, "unmarshal wireguard peer message", slog.Error(err))
+				continue
+			}
+
+			ch <- &msg
+		}
+	}()
+
+	return ch, func() { _ = conn.Close(websocket.StatusGoingAway, "") }, nil
+}
+
+func (c *Client) PostWorkspaceAgentKeys(ctx context.Context, keys agent.PublicKeys) error {
+	res, err := c.Request(ctx, http.MethodPost, "/api/v2/workspaceagents/me/keys", keys)
+	if err != nil {
+		return xerrors.Errorf("do request: %w", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusNoContent {
+		return readBodyAsError(res)
+	}
+	return nil
+}
+
 // DialWorkspaceAgent creates a connection to the specified resource.
 func (c *Client) DialWorkspaceAgent(ctx context.Context, agentID uuid.UUID, options *peer.ConnOptions) (*agent.Conn, error) {
 	serverURL, err := c.URL.Parse(fmt.Sprintf("/api/v2/workspaceagents/%s/dial", agentID.String()))

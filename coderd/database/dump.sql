@@ -111,6 +111,14 @@ CREATE TABLE audit_logs (
     status_code integer NOT NULL
 );
 
+CREATE TABLE cli_wireguard_peers (
+    id uuid NOT NULL,
+    owner uuid NOT NULL,
+    wireguard_public_key character varying(128),
+    disco_public_key character varying(128),
+    ipv6 inet NOT NULL
+);
+
 CREATE TABLE files (
     hash character varying(64) NOT NULL,
     created_at timestamp with time zone NOT NULL,
@@ -280,7 +288,10 @@ CREATE TABLE workspace_agents (
     startup_script character varying(65534),
     instance_metadata jsonb,
     resource_metadata jsonb,
-    directory character varying(4096) DEFAULT ''::character varying NOT NULL
+    directory character varying(4096) DEFAULT ''::character varying NOT NULL,
+    ipv6 inet DEFAULT '::'::inet NOT NULL,
+    wireguard_public_key character varying(128) DEFAULT 'mkey:0000000000000000000000000000000000000000000000000000000000000000'::character varying NOT NULL,
+    disco_public_key character varying(128) DEFAULT 'discokey:0000000000000000000000000000000000000000000000000000000000000000'::character varying NOT NULL
 );
 
 CREATE TABLE workspace_apps (
@@ -338,6 +349,12 @@ ALTER TABLE ONLY api_keys
 
 ALTER TABLE ONLY audit_logs
     ADD CONSTRAINT audit_logs_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY cli_wireguard_peers
+    ADD CONSTRAINT cli_wireguard_peers_ipv6_key UNIQUE (ipv6);
+
+ALTER TABLE ONLY cli_wireguard_peers
+    ADD CONSTRAINT cli_wireguard_peers_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY files
     ADD CONSTRAINT files_pkey PRIMARY KEY (hash);
@@ -452,6 +469,9 @@ CREATE UNIQUE INDEX workspaces_owner_id_lower_idx ON workspaces USING btree (own
 
 ALTER TABLE ONLY api_keys
     ADD CONSTRAINT api_keys_user_id_uuid_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY cli_wireguard_peers
+    ADD CONSTRAINT cli_wireguard_peers_owner_fkey FOREIGN KEY (owner) REFERENCES users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY gitsshkeys
     ADD CONSTRAINT gitsshkeys_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id);

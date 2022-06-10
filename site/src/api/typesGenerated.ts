@@ -388,7 +388,7 @@ export interface Workspace {
   readonly ttl_ms?: number
 }
 
-// From codersdk/workspaceresources.go:31:6
+// From codersdk/workspaceresources.go:32:6
 export interface WorkspaceAgent {
   readonly id: string
   readonly created_at: string
@@ -406,6 +406,12 @@ export interface WorkspaceAgent {
   readonly startup_script?: string
   readonly directory?: string
   readonly apps: WorkspaceApp[]
+  // Named type "tailscale.com/types/key.NodePublic" unknown, using "any"
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  readonly wireguard_public_key: any
+  // Named type "tailscale.com/types/key.DiscoPublic" unknown, using "any"
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  readonly disco_public_key: any
 }
 
 // From codersdk/workspaceagents.go:47:6
@@ -413,7 +419,7 @@ export interface WorkspaceAgentAuthenticateResponse {
   readonly session_token: string
 }
 
-// From codersdk/workspaceresources.go:58:6
+// From codersdk/workspaceresources.go:61:6
 export interface WorkspaceAgentInstanceMetadata {
   readonly jail_orchestrator: string
   readonly operating_system: string
@@ -426,7 +432,7 @@ export interface WorkspaceAgentInstanceMetadata {
   readonly vnc: boolean
 }
 
-// From codersdk/workspaceresources.go:50:6
+// From codersdk/workspaceresources.go:53:6
 export interface WorkspaceAgentResourceMetadata {
   readonly memory_total: number
   readonly disk_total: number
@@ -477,7 +483,7 @@ export interface WorkspaceOptions {
   readonly include_deleted?: boolean
 }
 
-// From codersdk/workspaceresources.go:21:6
+// From codersdk/workspaceresources.go:22:6
 export interface WorkspaceResource {
   readonly id: string
   readonly created_at: string
@@ -518,7 +524,7 @@ export type ProvisionerType = "echo" | "terraform"
 // From codersdk/users.go:17:6
 export type UserStatus = "active" | "suspended"
 
-// From codersdk/workspaceresources.go:13:6
+// From codersdk/workspaceresources.go:14:6
 export type WorkspaceAgentStatus = "connected" | "connecting" | "disconnected"
 
 // From codersdk/workspacebuilds.go:14:6
