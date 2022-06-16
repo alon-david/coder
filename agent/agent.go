@@ -246,7 +246,6 @@ func (a *agent) handlePeerConn(ctx context.Context, conn *peer.Conn) {
 }
 
 func (a *agent) init(ctx context.Context) {
-
 	// Clients' should ignore the host key when connecting.
 	// The agent needs to authenticate with coderd to SSH,
 	// so SSH authentication doesn't improve security.
