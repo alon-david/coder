@@ -33,6 +33,7 @@ import (
 	"cdr.dev/slog"
 	"github.com/coder/coder/agent/usershell"
 	"github.com/coder/coder/peer"
+	"github.com/coder/coder/peer/peerwg"
 	"github.com/coder/coder/peerbroker"
 	"github.com/coder/coder/pty"
 	"github.com/coder/retry"
@@ -68,7 +69,7 @@ type PublicKeys struct {
 
 type Dialer func(ctx context.Context, logger slog.Logger) (Metadata, *peerbroker.Listener, error)
 type PostKeys func(ctx context.Context, keys PublicKeys) error
-type ListenWireguardPeers func(ctx context.Context, logger slog.Logger) (<-chan *WireguardPeerMessage, func(), error)
+type ListenWireguardPeers func(ctx context.Context, logger slog.Logger) (<-chan *peerwg.WireguardPeerMessage, func(), error)
 
 func New(dialer Dialer, options *Options) io.Closer {
 	if options == nil {
@@ -112,7 +113,7 @@ type agent struct {
 	startupScript atomic.Bool
 	sshServer     *ssh.Server
 
-	wg *WireguardNetwork
+	wg *peerwg.WireguardNetwork
 }
 
 func (a *agent) run(ctx context.Context) {

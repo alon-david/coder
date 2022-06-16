@@ -23,11 +23,11 @@ import (
 
 	"cdr.dev/slog"
 
-	"github.com/coder/coder/agent"
 	"github.com/coder/coder/coderd/database"
 	"github.com/coder/coder/coderd/httpapi"
 	"github.com/coder/coder/coderd/parameter"
 	"github.com/coder/coder/coderd/rbac"
+	"github.com/coder/coder/peer/peerwg"
 	"github.com/coder/coder/provisionerd/proto"
 	"github.com/coder/coder/provisionersdk"
 	sdkproto "github.com/coder/coder/provisionersdk/proto"
@@ -730,7 +730,7 @@ func insertWorkspaceResource(ctx context.Context, db database.Store, jobID uuid.
 		agentID := uuid.New()
 		dbAgent, err := db.InsertWorkspaceAgent(ctx, database.InsertWorkspaceAgentParams{
 			ID:                   agentID,
-			Ipv6:                 agent.UUIDToInet(agentID),
+			Ipv6:                 peerwg.UUIDToInet(agentID),
 			CreatedAt:            database.Now(),
 			UpdatedAt:            database.Now(),
 			ResourceID:           resource.ID,

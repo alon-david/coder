@@ -29,6 +29,7 @@ import (
 	"github.com/coder/coder/coderd/turnconn"
 	"github.com/coder/coder/codersdk"
 	"github.com/coder/coder/peer"
+	"github.com/coder/coder/peer/peerwg"
 	"github.com/coder/coder/peerbroker"
 	"github.com/coder/coder/peerbroker/proto"
 	"github.com/coder/coder/provisionersdk"
@@ -555,7 +556,7 @@ func (api *API) postWorkspaceAgentKeys(rw http.ResponseWriter, r *http.Request) 
 
 func (api *API) postWorkspaceAgentWireguardPeer(rw http.ResponseWriter, r *http.Request) {
 	var (
-		req            agent.WireguardPeerMessage
+		req            peerwg.WireguardPeerMessage
 		workspaceAgent = httpmw.WorkspaceAgentParam(r)
 	)
 	// if !api.Authorize(r, rbac.ActionUpdate, workspace) {
@@ -619,7 +620,7 @@ func (api *API) workspaceAgentWireguardListener(rw http.ResponseWriter, r *http.
 		// Since we subscribe to all peer broadcasts, we do a light check to
 		// make sure we're the intended recipient without fully decoding the
 		// message.
-		hint, err := agent.WireguardPeerMessageRecipientHint(agentIDBytes, message)
+		hint, err := peerwg.WireguardPeerMessageRecipientHint(agentIDBytes, message)
 		if err != nil {
 			api.Logger.Error(ctx, "invalid wireguard peer message", slog.Error(err))
 			return

@@ -23,6 +23,7 @@ import (
 	"github.com/coder/coder/coderd/httpmw"
 	"github.com/coder/coder/coderd/turnconn"
 	"github.com/coder/coder/peer"
+	"github.com/coder/coder/peer/peerwg"
 	"github.com/coder/coder/peerbroker"
 	"github.com/coder/coder/peerbroker/proto"
 	"github.com/coder/coder/provisionersdk"
@@ -252,7 +253,7 @@ func (c *Client) ListenWorkspaceAgent(ctx context.Context, logger slog.Logger) (
 	return agentMetadata, listener, json.NewDecoder(res.Body).Decode(&agentMetadata)
 }
 
-func (c *Client) PostWireguardPeer(ctx context.Context, peerMsg agent.WireguardPeerMessage) error {
+func (c *Client) PostWireguardPeer(ctx context.Context, peerMsg peerwg.WireguardPeerMessage) error {
 	res, err := c.Request(ctx, http.MethodPost, fmt.Sprintf("/api/v2/workspaceagents/%s/peer", peerMsg.Recipient), peerMsg)
 	if err != nil {
 		return err
@@ -266,7 +267,7 @@ func (c *Client) PostWireguardPeer(ctx context.Context, peerMsg agent.WireguardP
 	return nil
 }
 
-func (c *Client) WireguardPeerListener(ctx context.Context, logger slog.Logger) (<-chan *agent.WireguardPeerMessage, func(), error) {
+func (c *Client) WireguardPeerListener(ctx context.Context, logger slog.Logger) (<-chan *peerwg.WireguardPeerMessage, func(), error) {
 	serverURL, err := c.URL.Parse("/api/v2/workspaceagents/me/wireguardlisten")
 	if err != nil {
 		return nil, nil, xerrors.Errorf("parse url: %w", err)
@@ -296,7 +297,7 @@ func (c *Client) WireguardPeerListener(ctx context.Context, logger slog.Logger) 
 		return nil, nil, readBodyAsError(res)
 	}
 
-	ch := make(chan *agent.WireguardPeerMessage, 1)
+	ch := make(chan *peerwg.WireguardPeerMessage, 1)
 	go func() {
 		defer conn.Close(websocket.StatusGoingAway, "")
 		defer close(ch)
@@ -307,7 +308,7 @@ func (c *Client) WireguardPeerListener(ctx context.Context, logger slog.Logger) 
 				break
 			}
 
-			var msg agent.WireguardPeerMessage
+			var msg peerwg.WireguardPeerMessage
 			err = msg.UnmarshalText(message)
 			if err != nil {
 				logger.Error(ctx, "unmarshal wireguard peer message", slog.Error(err))

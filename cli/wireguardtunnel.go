@@ -18,10 +18,10 @@ import (
 
 	"cdr.dev/slog"
 	"cdr.dev/slog/sloggers/sloghuman"
-	"github.com/coder/coder/agent"
 	coderagent "github.com/coder/coder/agent"
 	"github.com/coder/coder/cli/cliui"
 	"github.com/coder/coder/codersdk"
+	"github.com/coder/coder/peer/peerwg"
 )
 
 func wireguardPortForward() *cobra.Command {
@@ -98,8 +98,8 @@ func wireguardPortForward() *cobra.Command {
 				return xerrors.Errorf("await agent: %w", err)
 			}
 
-			ipv6 := agent.UUIDToNetaddr(uuid.New())
-			wgn, err := agent.NewWireguardNetwork(cmd.Context(),
+			ipv6 := peerwg.UUIDToNetaddr(uuid.New())
+			wgn, err := peerwg.NewWireguardNetwork(cmd.Context(),
 				slog.Make(sloghuman.Sink(os.Stderr)),
 				[]netaddr.IPPrefix{netaddr.IPPrefixFrom(ipv6, 128)},
 			)
@@ -107,7 +107,7 @@ func wireguardPortForward() *cobra.Command {
 				return xerrors.Errorf("create wireguard network: %w", err)
 			}
 
-			err = client.PostWireguardPeer(cmd.Context(), agent.WireguardPeerMessage{
+			err = client.PostWireguardPeer(cmd.Context(), peerwg.WireguardPeerMessage{
 				Recipient: workspaceAgent.ID,
 				Public:    wgn.Private.Public(),
 				Disco:     wgn.Disco,
@@ -117,7 +117,7 @@ func wireguardPortForward() *cobra.Command {
 				return xerrors.Errorf("post wireguard peer: %w", err)
 			}
 
-			err = wgn.AddPeer(coderagent.WireguardPeerMessage{
+			err = wgn.AddPeer(peerwg.WireguardPeerMessage{
 				Recipient: workspaceAgent.ID,
 				Disco:     workspaceAgent.DiscoPublicKey,
 				Public:    workspaceAgent.WireguardPublicKey,
@@ -184,7 +184,7 @@ func wireguardPortForward() *cobra.Command {
 }
 
 func listenAndPortForwardWireguard(ctx context.Context, cmd *cobra.Command,
-	wgn *agent.WireguardNetwork,
+	wgn *peerwg.WireguardNetwork,
 	wg *sync.WaitGroup,
 	spec portForwardSpec,
 	agentIP netaddr.IP,
