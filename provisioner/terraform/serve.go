@@ -44,7 +44,7 @@ type ServeOptions struct {
 	Logger     slog.Logger
 }
 
-func absoluteBinaryPath() (string, bool) {
+func absoluteBinaryPath(ctx context.Context) (string, bool) {
 	binaryPath, err := safeexec.LookPath("terraform")
 	if err != nil {
 		return "", false
@@ -61,10 +61,10 @@ func absoluteBinaryPath() (string, bool) {
 	}
 
 	// Checking the installed version of Terraform.
-	// version, err := versionFromBinaryPath(ctx, absoluteBinary)
-	// if err != nil {
-	// 	return "", false
-	// }
+	_, err = versionFromBinaryPath(ctx, absoluteBinary)
+	if err != nil {
+		return "", false
+	}
 
 	// if version.LessThan(minTerraformVersion) || version.GreaterThanOrEqual(maxTerraformVersion) {
 	// 	return "", false
@@ -76,7 +76,7 @@ func absoluteBinaryPath() (string, bool) {
 // Serve starts a dRPC server on the provided transport speaking Terraform provisioner.
 func Serve(ctx context.Context, options *ServeOptions) error {
 	if options.BinaryPath == "" {
-		absoluteBinary, ok := absoluteBinaryPath()
+		absoluteBinary, ok := absoluteBinaryPath(ctx)
 
 		if ok {
 			options.BinaryPath = absoluteBinary

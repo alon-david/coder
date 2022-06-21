@@ -85,7 +85,7 @@ func Test_absoluteBinaryPath(t *testing.T) {
 				expectedAbsoluteBinary = filepath.Join(tempDir, "terraform")
 			}
 
-			actualAbsoluteBinary, actualOk := absoluteBinaryPath()
+			actualAbsoluteBinary, actualOk := absoluteBinaryPath(tt.args.ctx)
 			if actualAbsoluteBinary != expectedAbsoluteBinary {
 				t.Errorf("getAbsoluteBinaryPath() absoluteBinaryPath, actual = %v, expected %v", actualAbsoluteBinary, expectedAbsoluteBinary)
 			}
