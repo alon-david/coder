@@ -17,8 +17,9 @@ import (
 // This is the exact version of Terraform used internally
 // when Terraform is missing on the system.
 var terraformVersion = version.Must(version.NewVersion("1.1.9"))
-var minTerraformVersion = version.Must(version.NewVersion("1.1.0"))
-var maxTerraformVersion = version.Must(version.NewVersion("1.2.0"))
+
+// var minTerraformVersion = version.Must(version.NewVersion("1.1.0"))
+// var maxTerraformVersion = version.Must(version.NewVersion("1.2.0"))
 
 var (
 	// The minimum version of Terraform supported by the provisioner.
@@ -43,7 +44,7 @@ type ServeOptions struct {
 	Logger     slog.Logger
 }
 
-func getAbsoluteBinaryPath(ctx context.Context) (string, bool) {
+func absoluteBinaryPath() (string, bool) {
 	binaryPath, err := safeexec.LookPath("terraform")
 	if err != nil {
 		return "", false
@@ -60,14 +61,14 @@ func getAbsoluteBinaryPath(ctx context.Context) (string, bool) {
 	}
 
 	// Checking the installed version of Terraform.
-	version, err := versionFromBinaryPath(ctx, absoluteBinary)
-	if err != nil {
-		return "", false
-	}
+	// version, err := versionFromBinaryPath(ctx, absoluteBinary)
+	// if err != nil {
+	// 	return "", false
+	// }
 
-	if version.LessThan(minTerraformVersion) || version.GreaterThanOrEqual(maxTerraformVersion) {
-		return "", false
-	}
+	// if version.LessThan(minTerraformVersion) || version.GreaterThanOrEqual(maxTerraformVersion) {
+	// 	return "", false
+	// }
 
 	return absoluteBinary, true
 }
@@ -75,7 +76,7 @@ func getAbsoluteBinaryPath(ctx context.Context) (string, bool) {
 // Serve starts a dRPC server on the provided transport speaking Terraform provisioner.
 func Serve(ctx context.Context, options *ServeOptions) error {
 	if options.BinaryPath == "" {
-		absoluteBinary, ok := getAbsoluteBinaryPath(ctx)
+		absoluteBinary, ok := absoluteBinaryPath()
 
 		if ok {
 			options.BinaryPath = absoluteBinary
