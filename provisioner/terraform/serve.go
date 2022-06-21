@@ -2,6 +2,7 @@ package terraform
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 
 	"github.com/cli/safeexec"
@@ -59,9 +60,11 @@ func absoluteBinaryPath(ctx context.Context) (string, bool) {
 	if err != nil {
 		return "", false
 	}
+	_, _ = fmt.Printf("Terraform binary: %q", absoluteBinary)
 
 	// Checking the installed version of Terraform.
-	_, err = versionFromBinaryPath(ctx, absoluteBinary)
+	version, err := versionFromBinaryPath(ctx, absoluteBinary)
+	_, _ = fmt.Printf("Terraform version: %q", version)
 	if err != nil {
 		return "", false
 	}

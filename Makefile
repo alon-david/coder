@@ -167,8 +167,8 @@ test: test-clean
 .PHONY: test
 
 test-postgres: test-clean
-	DB=ci gotestsum --junitfile="gotests.xml" --packages="./cli/..." -- \
-          -covermode=atomic -coverprofile="gotests.coverage" -timeout=30m \
+	DB=ci gotestsum --junitfile="gotests.xml" --packages="./cli" -- \
+          -run TestServer/BuiltinPostgres -covermode=atomic -coverprofile="gotests.coverage" -timeout=30m \
           -coverpkg=./...,github.com/coder/coder/codersdk \
           -count=1 -race -failfast
 .PHONY: test-postgres
